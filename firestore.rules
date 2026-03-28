@@ -11,6 +11,7 @@ service cloud.firestore {
     // Fields:
     //   - id: string (required) - UID
     //   - email: string (required) - User email
+    //   - role: string (required) - Patient/Doctor
     //   - name: string (required) - User display name
     //   - age: number (required) - Age in years
     //   - height: number (required) - Height in cm
@@ -21,7 +22,15 @@ service cloud.firestore {
     //   - foodPreference: string (required) - Diet preference
     //   - healthIssues: string (optional) - Health notes
     //   - createdAt: string (required) - ISO date string
+    //   - healthLogs: list (optional) - List of health log maps
     //   - weightLogs: list (optional) - List of {date, weight} maps
+    //   - restingHeartRate: number (optional)
+    //   - dailySleep: number (optional)
+    //   - dailySteps: number (optional)
+    //   - systolicBP: number (optional)
+    //   - smokingStatus: string (optional)
+    //   - dietQuality: string (optional)
+    //   - stressLevel: string (optional)
     //
     // Collection: /plans/{userId}
     // Document ID: Firebase Auth UID
@@ -31,6 +40,7 @@ service cloud.firestore {
     //   - workoutPlan: map (required) - Generated workout plan
     //   - summary: string (required) - Plan summary
     //   - updatedAt: string (required) - ISO date string
+    //   - longevityAnalysis: map (optional) - Longevity analysis
     //
     // ===============================================================
 
@@ -46,9 +56,16 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isDoctor() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Doctor';
+    }
+
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
           (request.auth.token.email == "kaushik.c9035@gmail.com" && request.auth.token.email_verified == true));
     }
 
@@ -72,10 +89,15 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
 
-    function isValidUser(data) {
-      return hasRequiredFields(['id', 'email', 'name', 'age', 'height', 'weight', 'gender', 'activityLevel', 'fitnessGoal', 'foodPreference', 'createdAt']) &&
-             data.id == request.auth.uid &&
+    function isValidUser(data, userId) {
+      let requiredFields = ['id', 'email', 'role', 'name', 'age', 'height', 'weight', 'gender', 'activityLevel', 'fitnessGoal', 'foodPreference', 'createdAt'];
+      let optionalFields = ['healthIssues', 'healthLogs', 'weightLogs', 'restingHeartRate', 'dailySleep', 'dailySteps', 'systolicBP', 'smokingStatus', 'dietQuality', 'stressLevel', 'prescribedPills', 'familyId', 'familyRelationship'];
+      
+      return hasRequiredFields(requiredFields) &&
+             hasOnlyAllowedFields(requiredFields.concat(optionalFields)) &&
+             data.id == userId &&
              isValidEmail(data.email) &&
+             data.role in ['Patient', 'Doctor'] &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.age is number && data.age > 0 && data.age < 120 &&
              data.height is number && data.height > 50 && data.height < 300 &&
@@ -84,16 +106,33 @@ service cloud.firestore {
              data.activityLevel in ['Sedentary', 'Lightly Active', 'Moderately Active', 'Very Active', 'Super Active'] &&
              data.fitnessGoal in ['Lose Weight', 'Maintain Weight', 'Build Muscle'] &&
              data.foodPreference in ['Vegetarian', 'Non-Vegetarian', 'Vegan', 'Keto', 'Paleo'] &&
-             isValidDateString(data.createdAt);
+             isValidDateString(data.createdAt) &&
+             (!('healthIssues' in data) || (data.healthIssues is string && data.healthIssues.size() < 1000)) &&
+             (!('healthLogs' in data) || data.healthLogs is list) &&
+             (!('weightLogs' in data) || data.weightLogs is list) &&
+             (!('restingHeartRate' in data) || data.restingHeartRate is number) &&
+             (!('dailySleep' in data) || data.dailySleep is number) &&
+             (!('dailySteps' in data) || data.dailySteps is number) &&
+             (!('systolicBP' in data) || data.systolicBP is number) &&
+             (!('smokingStatus' in data) || data.smokingStatus in ['Non-smoker', 'Former smoker', 'Current smoker']) &&
+             (!('dietQuality' in data) || data.dietQuality in ['Poor', 'Average', 'Excellent']) &&
+             (!('stressLevel' in data) || data.stressLevel in ['Low', 'Moderate', 'High', 'Very High']) &&
+             (!('familyId' in data) || (data.familyId is string && data.familyId.size() < 100)) &&
+             (!('familyRelationship' in data) || (data.familyRelationship is string && data.familyRelationship.size() < 50));
     }
 
     function isValidPlan(data) {
-      return hasRequiredFields(['userId', 'dietPlan', 'workoutPlan', 'summary', 'updatedAt']) &&
+      let requiredFields = ['userId', 'dietPlan', 'workoutPlan', 'summary', 'updatedAt'];
+      let optionalFields = ['longevityAnalysis'];
+      
+      return hasRequiredFields(requiredFields) &&
+             hasOnlyAllowedFields(requiredFields.concat(optionalFields)) &&
              data.userId == request.auth.uid &&
              data.dietPlan is map &&
              data.workoutPlan is map &&
              data.summary is string && data.summary.size() < 10000 &&
-             isValidDateString(data.updatedAt);
+             isValidDateString(data.updatedAt) &&
+             (!('longevityAnalysis' in data) || data.longevityAnalysis is map);
     }
 
     // ===============================================================
@@ -101,17 +140,19 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+      allow read: if isOwner(userId) || isAdmin() || (isDoctor() && resource.data.role == 'Patient');
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data, userId) && 
                       request.resource.data.id == resource.data.id &&
                       request.resource.data.email == resource.data.email &&
-                      request.resource.data.createdAt == resource.data.createdAt;
+                      request.resource.data.createdAt == resource.data.createdAt) ||
+                      (isDoctor() && resource.data.role == 'Patient' && 
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prescribedPills', 'familyId', 'familyRelationship']));
       allow delete: if isAdmin();
     }
 
     match /plans/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin() || isDoctor();
       allow create: if isOwner(userId) && isValidPlan(request.resource.data);
       allow update: if isOwner(userId) && isValidPlan(request.resource.data) &&
                       request.resource.data.userId == resource.data.userId;

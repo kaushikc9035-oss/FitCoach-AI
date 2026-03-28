@@ -10,83 +10,146 @@ interface WorkoutPlanViewProps {
 const WorkoutPlanView: React.FC<WorkoutPlanViewProps> = ({ plan, onGenerate, isLoading }) => {
   if (!plan) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-12">
-        <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-full mb-4">
-          <svg className="w-10 h-10 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center p-12 animate-fade-in">
+        <div className="glass p-8 rounded-full mb-8 bg-ll-accent/10 border border-ll-accent/20 shadow-2xl shadow-ll-accent/10">
+          <svg className="w-16 h-16 text-ll-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">No Workout Plan Available</h2>
-        <p className="text-slate-500 dark:text-slate-400 mb-6">Generate a routine tailored to your goals.</p>
+        <h2 className="text-4xl font-extrabold font-syne text-ll-text mb-4 tracking-tight">No Active Routine</h2>
+        <p className="text-ll-text-muted max-w-md mb-10 text-lg font-medium leading-relaxed">
+          Your AI coach is ready to build a high-performance routine tailored to your biological age and health goals.
+        </p>
         <button
           onClick={onGenerate}
           disabled={isLoading}
-          className="bg-orange-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:bg-orange-700 transition disabled:opacity-50"
+          className="group relative px-10 py-5 bg-ll-accent hover:bg-ll-accent/90 text-ll-bg rounded-2xl font-bold text-lg shadow-2xl shadow-ll-accent/20 transition-all active:scale-95 disabled:opacity-50 overflow-hidden"
         >
-          {isLoading ? 'Generating...' : 'Generate Plan'}
+          <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+          <span className="relative flex items-center gap-3">
+            {isLoading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-ll-bg/30 border-t-ll-bg rounded-full animate-spin"></div>
+                Analyzing Metrics...
+              </>
+            ) : (
+              <>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate Performance Plan
+              </>
+            )}
+          </span>
         </button>
       </div>
     );
   }
 
-  // Flatten the routine for a simple list view as per screenshot style
   const exercises = plan.workoutPlan.routine.flatMap(day => day.exercises);
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-12 animate-fade-in pb-12">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Workout Plan</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Your personalized exercise routine</p>
+          <h1 className="text-4xl font-extrabold font-syne text-ll-text tracking-tight">Workout Routine</h1>
+          <p className="text-ll-text-muted mt-2 text-lg font-medium">Precision training for longevity</p>
         </div>
         <button
           onClick={onGenerate}
           disabled={isLoading}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-md shadow-orange-200 dark:shadow-none transition flex items-center gap-2"
+          className="glass px-6 py-4 bg-ll-surface/30 hover:bg-ll-surface/50 text-ll-text rounded-2xl font-black border border-white/5 transition-all active:scale-95 flex items-center gap-3 text-sm uppercase tracking-widest shadow-xl"
         >
-           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          {isLoading ? 'Generating...' : 'Generate New Plan'}
+          <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {isLoading ? 'Recalculating...' : 'GENERATE NEW PLAN'}
         </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 transition-colors">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white">Your Workout Routine</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{exercises.length} exercises • Estimated 370 calories</p>
+      <div className="glass p-8 rounded-3xl border border-white/5 bg-ll-surface/30">
+        <div className="flex flex-wrap justify-between items-center gap-6">
+          <div className="flex items-center gap-6">
+            <div className="p-4 rounded-2xl bg-ll-accent/10 border border-ll-accent/20">
+              <svg className="w-8 h-8 text-ll-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-ll-text tracking-tight font-syne">Daily Performance</h3>
+              <p className="text-ll-text-muted font-bold uppercase text-[10px] tracking-widest mt-1">
+                {exercises.length} Exercises • ~450 Calories
+              </p>
+            </div>
           </div>
-          <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-600">
-             Generated: {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
+          <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-ll-text/5 border border-ll-text/10">
+            <div className="w-2 h-2 rounded-full bg-ll-accent animate-pulse"></div>
+            <span className="text-[10px] font-bold text-ll-text-muted uppercase tracking-widest">
+              Active Routine
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6">
         {exercises.map((exercise, idx) => (
-          <div key={idx} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden p-6 flex gap-6 transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 to-orange-500 text-white flex items-center justify-center font-bold text-xl shadow-md shrink-0">
-              {idx + 1}
-            </div>
-            
-            <div className="flex-1">
-              <h4 className="text-lg font-bold text-slate-800 dark:text-white mb-2">{exercise.name}</h4>
-              <div className="flex gap-2 mb-4">
-                 <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-1 rounded">strength</span>
-                 <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                   {exercise.sets} sets
-                 </span>
-                 <span className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" /></svg>
-                   {Math.floor(Math.random() * 50 + 20)} cal
-                 </span>
+          <div 
+            key={idx} 
+            className="group glass rounded-[2rem] border border-white/5 bg-ll-surface/30 hover:bg-ll-surface/50 transition-all duration-500 overflow-hidden"
+          >
+            <div className="p-8 flex flex-col md:flex-row gap-8 items-start">
+              <div className="relative shrink-0">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-ll-accent to-ll-accent2 text-ll-bg flex items-center justify-center font-black text-3xl shadow-2xl shadow-ll-accent/20 group-hover:scale-110 transition-transform duration-500 font-syne">
+                  {idx + 1}
+                </div>
+                <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-lg bg-ll-bg border border-ll-text/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-ll-text/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
               </div>
               
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
-                <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Performance Notes:</p>
-                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                  {exercise.notes || exercise.reps || "Perform with controlled movement. Focus on form over weight."}
-                  <br/>
-                  Target Reps: <span className="font-semibold text-slate-700 dark:text-slate-300">{exercise.reps}</span>
-                </p>
+              <div className="flex-1 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <h4 className="text-2xl font-bold text-ll-text tracking-tight font-syne">{exercise.name}</h4>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1 rounded-lg bg-ll-accent/10 border border-ll-accent/20 text-ll-accent text-[10px] font-black uppercase tracking-widest">
+                      Strength
+                    </span>
+                    <span className="px-3 py-1 rounded-lg bg-ll-text/5 border border-ll-text/10 text-ll-text-muted text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {exercise.sets} Sets
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="glass rounded-2xl p-6 bg-ll-text/5 border border-ll-text/5">
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 rounded-lg bg-ll-text/5 mt-1">
+                      <svg className="w-4 h-4 text-ll-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-ll-text/80 leading-relaxed font-medium">
+                        {exercise.notes || "Focus on explosive power during the concentric phase and controlled resistance during the eccentric phase."}
+                      </p>
+                      <div className="flex items-center gap-4 pt-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-ll-text-muted uppercase tracking-widest">Target Reps</span>
+                          <span className="text-sm font-bold text-ll-accent font-syne">{exercise.reps}</span>
+                        </div>
+                        <div className="w-1 h-1 rounded-full bg-ll-text/10"></div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-ll-text-muted uppercase tracking-widest">Rest</span>
+                          <span className="text-sm font-bold text-ll-text/80 font-syne">60s</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

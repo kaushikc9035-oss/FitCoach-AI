@@ -4,15 +4,19 @@ import DashboardHome from './components/DashboardHome';
 import MealPlanView from './components/MealPlanView';
 import WorkoutPlanView from './components/WorkoutPlanView';
 import ProgressView from './components/ProgressView';
+import AICoach from './components/AICoach';
 import InputForm from './components/InputForm';
 import Login from './components/Login';
-import { UserProfile, GeneratedPlan } from './types';
+import DailyCheckIn from './components/DailyCheckIn';
+import DoctorDashboard from './components/DoctorDashboard';
+import DoctorProfile from './components/DoctorProfile';
+import MedicationView from './components/MedicationView';
+import FamilyTreeView from './components/FamilyTreeView';
+import { UserProfile, GeneratedPlan, UserRole, HealthLog, Gender, ActivityLevel, FitnessGoal, FoodPreference, ViewState } from './types';
 import { generateFitnessPlan } from './services/geminiService';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, getDocFromServer } from 'firebase/firestore';
-
-type ViewState = 'LOGIN' | 'DASHBOARD' | 'PROFILE' | 'MEAL_PLAN' | 'WORKOUT_PLAN' | 'PROGRESS';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, getDocFromServer, collection, query, where } from 'firebase/firestore';
 
 // Error Boundary Component
 class ErrorBoundary extends Component<any, any> {
@@ -33,13 +37,13 @@ class ErrorBoundary extends Component<any, any> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
-          <div className="max-w-md w-full bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl text-center">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">Application Error</h2>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">{message}</p>
+        <div className="min-h-screen flex items-center justify-center bg-ll-bg p-4 transition-colors duration-200">
+          <div className="max-w-md w-full glass p-8 rounded-2xl shadow-xl text-center">
+            <h2 className="text-2xl font-bold text-ll-danger mb-4">Application Error</h2>
+            <p className="text-ll-text-muted mb-6">{message}</p>
             <button 
               onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold"
+              className="bg-ll-accent text-ll-bg px-6 py-2 rounded-xl font-bold hover:opacity-90 transition-all"
             >
               Reload App
             </button>
@@ -54,13 +58,18 @@ class ErrorBoundary extends Component<any, any> {
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('LOGIN');
   const [isLoading, setIsLoading] = useState(false);
+  const [showDailyCheckIn, setShowDailyCheckIn] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [allPatients, setAllPatients] = useState<UserProfile[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<UserProfile[]>([]);
   const [currentPlan, setCurrentPlan] = useState<GeneratedPlan | null>(null);
   const [draftEmail, setDraftEmail] = useState<string>('');
   const [draftPassword, setDraftPassword] = useState<string>('');
+  const [draftRole, setDraftRole] = useState<UserRole>(UserRole.Patient);
   const [authError, setAuthError] = useState<string>('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [fatalError, setFatalError] = useState<any>(null);
 
   // Validate connection to Firestore
   useEffect(() => {
@@ -88,35 +97,74 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const [selectedPatient, setSelectedPatient] = useState<UserProfile | null>(null);
+
   // Auth state listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // User is signed in, fetch profile
-        const userRef = doc(db, 'users', user.uid);
-        try {
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            setCurrentUser(userSnap.data() as UserProfile);
-            setView('DASHBOARD');
-          } else {
-            // User exists in Auth but not in Firestore (maybe registration interrupted)
-            setDraftEmail(user.email || '');
-            setView('PROFILE');
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-        }
-      } else {
-        setCurrentUser(null);
-        setCurrentPlan(null);
-        setView('LOGIN');
+    // Force sign out once to start from login page as requested by user
+    const forceLogout = async () => {
+      const hasForcedLogout = sessionStorage.getItem('forced_logout_v1');
+      if (!hasForcedLogout) {
+        await signOut(auth);
+        sessionStorage.setItem('forced_logout_v1', 'true');
       }
-      setIsAuthReady(true);
+    };
+    forceLogout();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          // User is signed in, set up real-time profile listener
+          const userRef = doc(db, 'users', user.uid);
+          const unsubProfile = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const userData = docSnap.data() as UserProfile;
+              setCurrentUser(userData);
+              // If we're on LOGIN view, move to DASHBOARD
+              setView(prev => prev === 'LOGIN' ? 'DASHBOARD' : prev);
+            } else {
+              // User exists in Auth but not in Firestore
+              setDraftEmail(user.email || '');
+              setView('PROFILE');
+            }
+          }, (error) => {
+            handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          });
+          
+          return () => unsubProfile();
+        } else {
+          setCurrentUser(null);
+          setCurrentPlan(null);
+          setView('LOGIN');
+        }
+      } catch (error) {
+        console.error("Auth state error:", error);
+        setFatalError(error);
+      } finally {
+        setIsAuthReady(true);
+      }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Real-time patients listener for Doctors
+  useEffect(() => {
+    if (!currentUser || !isAuthReady || currentUser.role !== UserRole.Doctor) return;
+
+    const patientsQuery = query(collection(db, 'users'), where('role', '==', UserRole.Patient));
+    const unsubscribe = onSnapshot(patientsQuery, (snapshot) => {
+      const patients = snapshot.docs.map(doc => doc.data() as UserProfile);
+      setAllPatients(patients);
+    }, (error) => {
+      console.error("Patients listener error:", error);
+      console.error("Current User UID:", currentUser?.id);
+      console.error("Current User Role:", currentUser?.role);
+      setFatalError(error);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, isAuthReady]);
 
   // Real-time plan listener
   useEffect(() => {
@@ -130,11 +178,57 @@ const App: React.FC = () => {
         setCurrentPlan(null);
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `plans/${currentUser.id}`);
+      console.error("Plan listener error:", error);
+      setFatalError(error);
     });
 
     return () => unsubscribe();
   }, [currentUser, isAuthReady]);
+
+  // Daily check-in logic
+  useEffect(() => {
+    if (currentUser && isAuthReady && view === 'DASHBOARD') {
+      const today = new Date().toISOString().split('T')[0];
+      const hasLoggedToday = currentUser.healthLogs?.some(log => log.date.startsWith(today));
+      if (!hasLoggedToday) {
+        setShowDailyCheckIn(true);
+      }
+    }
+  }, [currentUser, isAuthReady, view]);
+
+  // Log on Login logic
+  useEffect(() => {
+    const logOnLogin = async () => {
+      if (currentUser && isAuthReady && view === 'DASHBOARD') {
+        const today = new Date().toISOString().split('T')[0];
+        const hasLoggedToday = currentUser.healthLogs?.some(log => log.date.startsWith(today));
+        
+        if (!hasLoggedToday) {
+          console.log("Logging login event for today...");
+          const lastLog = currentUser.healthLogs?.[currentUser.healthLogs.length - 1];
+          const newHealthLog: HealthLog = {
+            date: new Date().toISOString(),
+            weight: currentUser.weight,
+            healthScore: lastLog?.healthScore || currentPlan?.longevityAnalysis?.longevityScore || 50,
+            bioAge: lastLog?.bioAge || currentPlan?.longevityAnalysis?.estimatedBiologicalAge || currentUser.age,
+            steps: currentUser.dailySteps || 0
+          };
+          
+          const updatedHealthLogs = [...(currentUser.healthLogs || []), newHealthLog];
+          const userRef = doc(db, 'users', currentUser.id);
+          
+          try {
+            await updateDoc(userRef, { healthLogs: updatedHealthLogs });
+            setCurrentUser(prev => prev ? { ...prev, healthLogs: updatedHealthLogs } : null);
+          } catch (error) {
+            console.error("Error logging login event:", error);
+          }
+        }
+      }
+    };
+    
+    logOnLogin();
+  }, [currentUser?.id, isAuthReady, view]);
 
   // Theme toggle handler
   const toggleTheme = () => {
@@ -149,7 +243,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     setAuthError('');
     try {
@@ -163,15 +257,42 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRegisterStart = async (email: string, password: string) => {
+  const handleRegisterStart = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     setAuthError('');
     try {
       // We create the user in Auth first
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      setDraftEmail(email);
-      setDraftPassword(password);
-      setView('PROFILE');
+      const uid = userCredential.user.uid;
+      
+      if (role === UserRole.Doctor) {
+        setDraftRole(role);
+        // For doctors, we skip the health metrics input and create a basic profile
+        const userRef = doc(db, 'users', uid);
+        const newDoctor: UserProfile = {
+          id: uid,
+          email: email,
+          role: UserRole.Doctor,
+          name: email.split('@')[0], // Default name
+          age: 35, // Default values that won't be used for analysis
+          height: 175,
+          weight: 70,
+          gender: Gender.Male,
+          activityLevel: ActivityLevel.ModeratelyActive,
+          fitnessGoal: FitnessGoal.Maintain,
+          foodPreference: FoodPreference.NonVeg,
+          createdAt: new Date().toISOString(),
+          weightLogs: [],
+          healthLogs: []
+        };
+        await setDoc(userRef, newDoctor);
+        setCurrentUser(newDoctor);
+        setView('DASHBOARD');
+      } else {
+        setDraftEmail(email);
+        setDraftRole(role);
+        setView('PROFILE');
+      }
     } catch (error: any) {
       console.error("Registration error:", error);
       setAuthError(error.message || 'Failed to create account.');
@@ -180,7 +301,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleProfileSubmit = async (formData: Omit<UserProfile, 'id' | 'createdAt' | 'weightLogs'>) => {
+  const handleDoctorProfileUpdate = async (name: string) => {
+    if (!currentUser) return;
+    setIsLoading(true);
+    try {
+      const userRef = doc(db, 'users', currentUser.id);
+      await updateDoc(userRef, { name });
+      setCurrentUser({ ...currentUser, name });
+      setView('DASHBOARD');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.id}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (formData: Omit<UserProfile, 'id' | 'createdAt' | 'weightLogs' | 'healthLogs' | 'role'>) => {
     if (!auth.currentUser) return;
     setIsLoading(true);
     
@@ -194,9 +330,11 @@ const App: React.FC = () => {
       } : {
         ...formData,
         id: uid,
+        role: draftRole,
         email: auth.currentUser.email || '',
         createdAt: new Date().toISOString(),
-        weightLogs: [{ date: new Date().toISOString().split('T')[0], weight: formData.weight }] 
+        weightLogs: [{ date: new Date().toISOString().split('T')[0], weight: formData.weight }],
+        healthLogs: []
       };
 
       await setDoc(userRef, newUser);
@@ -206,6 +344,9 @@ const App: React.FC = () => {
       setDraftEmail('');
       setDraftPassword('');
       
+      // Trigger analysis immediately
+      await handleGeneratePlan(newUser);
+      
       setView('DASHBOARD');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
@@ -214,24 +355,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGeneratePlan = async () => {
-    if (!currentUser) return;
+  const handleGeneratePlan = async (userToUse?: UserProfile, isRegeneration: boolean = false) => {
+    const user = userToUse || currentUser;
+    if (!user) return;
     setIsLoading(true);
     try {
-      const plan = await generateFitnessPlan(currentUser);
-      const planRef = doc(db, 'plans', currentUser.id);
+      const plan = await generateFitnessPlan(user, isRegeneration);
+      const planRef = doc(db, 'plans', user.id);
+      const userRef = doc(db, 'users', user.id);
       
       const planData = {
         ...plan,
-        userId: currentUser.id,
+        userId: user.id,
         updatedAt: new Date().toISOString()
       };
+
+      // Add a health log entry if longevity analysis is available
+      if (plan.longevityAnalysis) {
+        const newHealthLog: HealthLog = {
+          date: new Date().toISOString(),
+          weight: user.weight,
+          healthScore: plan.longevityAnalysis.longevityScore,
+          bioAge: plan.longevityAnalysis.estimatedBiologicalAge,
+          steps: user.dailySteps || 0
+        };
+        
+        const updatedHealthLogs = [...(user.healthLogs || []), newHealthLog];
+        await updateDoc(userRef, { healthLogs: updatedHealthLogs });
+        setCurrentUser({ ...user, healthLogs: updatedHealthLogs });
+      }
 
       await setDoc(planRef, planData);
       // onSnapshot will update currentPlan
     } catch (error) {
       console.error("Plan generation error:", error);
-      alert("Failed to generate plan. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -264,6 +421,75 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDailyCheckIn = async (data: Partial<UserProfile>) => {
+    if (!currentUser) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const userRef = doc(db, 'users', currentUser.id);
+    
+    try {
+      // 1. Update user profile with latest metrics
+      const updatedUser = {
+        ...currentUser,
+        ...data,
+      };
+      
+      // 2. Create a new health log entry for today
+      const lastLog = currentUser.healthLogs?.[currentUser.healthLogs.length - 1];
+      
+      // Extract feedback and medication from data (passed via @ts-ignore in DailyCheckIn)
+      // @ts-ignore
+      const { dailyFeedback, medicationTaken, ...profileData } = data;
+
+      const newHealthLog: HealthLog = {
+        date: new Date().toISOString(),
+        weight: data.weight || currentUser.weight,
+        healthScore: lastLog?.healthScore || currentPlan?.longevityAnalysis?.longevityScore || 50,
+        bioAge: lastLog?.bioAge || currentPlan?.longevityAnalysis?.estimatedBiologicalAge || currentUser.age,
+        steps: data.dailySteps || currentUser.dailySteps || 0,
+        dailyFeedback: dailyFeedback || '',
+        medicationTaken: medicationTaken !== undefined ? medicationTaken : true
+      };
+      
+      const updatedHealthLogs = [...(currentUser.healthLogs || []), newHealthLog];
+      
+      await updateDoc(userRef, {
+        ...profileData,
+        healthLogs: updatedHealthLogs
+      });
+      
+      setCurrentUser({
+        ...updatedUser,
+        healthLogs: updatedHealthLogs
+      });
+      
+      setShowDailyCheckIn(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.id}`);
+    }
+  };
+
+  const handleResetProgress = async () => {
+    if (!currentUser) return;
+    if (!window.confirm("Are you sure you want to reset your health history? This cannot be undone.")) return;
+    
+    const userRef = doc(db, 'users', currentUser.id);
+    try {
+      await updateDoc(userRef, {
+        healthLogs: [],
+        weightLogs: [{ date: new Date().toISOString().split('T')[0], weight: currentUser.weight }]
+      });
+      setCurrentUser({
+        ...currentUser,
+        healthLogs: [],
+        weightLogs: [{ date: new Date().toISOString().split('T')[0], weight: currentUser.weight }]
+      });
+      alert("Progress data has been reset.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.id}`);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -276,10 +502,93 @@ const App: React.FC = () => {
     }
   };
 
+  // Fetch family members if familyId exists
+  useEffect(() => {
+    const targetUser = selectedPatient || currentUser;
+    if (!targetUser?.familyId) {
+      setFamilyMembers([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'users'),
+      where('familyId', '==', targetUser.familyId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const members = snapshot.docs.map(doc => doc.data() as UserProfile);
+      setFamilyMembers(members);
+    }, (error) => {
+      console.error("Error fetching family members:", error);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser?.familyId]);
+
+  const handlePrescribePills = async (patientId: string, pills: string[]) => {
+    const userRef = doc(db, 'users', patientId);
+    try {
+      await updateDoc(userRef, { prescribedPills: pills });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${patientId}`);
+    }
+  };
+
+  const handleLinkFamily = async (patientId: string, familyId: string, relationship: string) => {
+    try {
+      await updateDoc(doc(db, 'users', patientId), {
+        familyId,
+        familyRelationship: relationship
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${patientId}`);
+    }
+  };
+
+  const handleToggleMedication = async (taken: boolean) => {
+    if (!currentUser) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const userRef = doc(db, 'users', currentUser.id);
+    
+    try {
+      const existingLogs = currentUser.healthLogs || [];
+      const todayLogIndex = existingLogs.findIndex(l => l.date.startsWith(today));
+      
+      let updatedLogs;
+      if (todayLogIndex !== -1) {
+        updatedLogs = [...existingLogs];
+        updatedLogs[todayLogIndex] = {
+          ...updatedLogs[todayLogIndex],
+          medicationTaken: taken
+        };
+      } else {
+        const lastLog = existingLogs[existingLogs.length - 1];
+        const newLog: HealthLog = {
+          date: new Date().toISOString(),
+          weight: currentUser.weight,
+          healthScore: lastLog?.healthScore || currentPlan?.longevityAnalysis?.longevityScore || 50,
+          bioAge: lastLog?.bioAge || currentPlan?.longevityAnalysis?.estimatedBiologicalAge || currentUser.age,
+          steps: currentUser.dailySteps || 0,
+          medicationTaken: taken
+        };
+        updatedLogs = [...existingLogs, newLog];
+      }
+      
+      await updateDoc(userRef, { healthLogs: updatedLogs });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.id}`);
+    }
+  };
+
+  if (fatalError) {
+    throw fatalError;
+  }
+
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-ll-bg transition-colors duration-200">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-ll-accent"></div>
       </div>
     );
   }
@@ -288,14 +597,26 @@ const App: React.FC = () => {
     return <Login onLogin={handleLogin} onRegister={handleRegisterStart} error={authError} isLoading={isLoading} />;
   }
 
+  const handleNavigate = (newView: ViewState) => {
+    setSelectedPatient(null);
+    setView(newView);
+  };
+
   return (
     <ErrorBoundary>
-      <div className="flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden font-sans text-slate-900 dark:text-slate-100 transition-colors duration-200">
+      {showDailyCheckIn && currentUser && (
+        <DailyCheckIn 
+          user={currentUser} 
+          onSave={handleDailyCheckIn} 
+          onClose={() => setShowDailyCheckIn(false)} 
+        />
+      )}
+      <div className="flex h-screen bg-ll-bg overflow-hidden font-sans text-ll-text transition-colors duration-200">
         {/* Sidebar */}
         {currentUser && (
           <Sidebar 
             activeView={view} 
-            onNavigate={setView} 
+            onNavigate={handleNavigate} 
             onLogout={handleLogout}
             user={currentUser}
             isDarkMode={isDarkMode}
@@ -304,25 +625,92 @@ const App: React.FC = () => {
         )}
 
         {/* Main Content */}
-        <main className={`flex-1 overflow-y-auto h-full p-8 ${currentUser ? 'ml-64' : ''}`}>
+        <main className={`flex-1 overflow-y-auto h-full p-4 md:p-8 relative z-10 ${currentUser ? 'md:ml-64' : ''}`}>
           <div className="max-w-5xl mx-auto">
             {view === 'DASHBOARD' && currentUser && (
-              <DashboardHome user={currentUser} plan={currentPlan} onNavigate={setView} />
+              currentUser.role === UserRole.Doctor ? (
+                <DoctorDashboard 
+                  patients={allPatients} 
+                  onPrescribe={handlePrescribePills}
+                  onViewFamilyTree={(patient) => {
+                    setSelectedPatient(patient);
+                    setView('FAMILY_TREE');
+                  }}
+                  onLinkFamily={handleLinkFamily}
+                />
+              ) : (
+                <DashboardHome 
+                  user={currentUser} 
+                  plan={currentPlan} 
+                  onNavigate={handleNavigate} 
+                  onOpenCheckIn={() => setShowDailyCheckIn(true)}
+                  onReAnalyze={() => handleGeneratePlan(currentUser, true)}
+                  isLoading={isLoading}
+                />
+              )
+            )}
+
+            {view === 'MEDICATIONS' && currentUser && (
+              <MedicationView 
+                user={currentUser} 
+                onToggleMedication={handleToggleMedication}
+              />
+            )}
+
+            {view === 'FAMILY_TREE' && currentUser && (
+              <FamilyTreeView 
+                currentUser={selectedPatient || currentUser} 
+                familyMembers={familyMembers}
+                allPatients={allPatients}
+                isDoctorView={currentUser.role === UserRole.Doctor}
+                onLinkFamily={handleLinkFamily}
+              />
             )}
 
             {view === 'PROFILE' && (
-              <InputForm 
-                initialData={currentUser} 
-                draftEmail={draftEmail}
-                onSubmit={handleProfileSubmit} 
-                isLoading={isLoading} 
-              />
+              <div className="space-y-8">
+                {(currentUser?.role === UserRole.Doctor || draftRole === UserRole.Doctor) ? (
+                  currentUser ? (
+                    <DoctorProfile 
+                      user={currentUser} 
+                      onSubmit={handleDoctorProfileUpdate} 
+                      isLoading={isLoading} 
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-20 glass rounded-[2.5rem]">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-ll-accent mb-4"></div>
+                      <p className="text-ll-text-muted font-medium animate-pulse">Initializing Doctor Profile...</p>
+                    </div>
+                  )
+                ) : (
+                  <InputForm 
+                    initialData={currentUser} 
+                    draftEmail={draftEmail}
+                    onSubmit={handleProfileSubmit} 
+                    isLoading={isLoading} 
+                  />
+                )}
+                {currentUser && currentUser.role === UserRole.Patient && (
+                  <div className="glass p-8 rounded-3xl border border-ll-danger/20 bg-ll-danger/5 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-ll-danger font-syne">Reset Health History</h3>
+                      <p className="text-ll-text-muted text-sm mt-1">This will permanently delete all your progress logs and trend data.</p>
+                    </div>
+                    <button 
+                      onClick={handleResetProgress}
+                      className="px-8 py-3 rounded-xl bg-ll-danger text-white font-bold hover:bg-ll-danger/90 transition-all active:scale-95 whitespace-nowrap"
+                    >
+                      Reset All Data
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {view === 'MEAL_PLAN' && (
               <MealPlanView 
                 plan={currentPlan} 
-                onGenerate={handleGeneratePlan} 
+                onGenerate={() => handleGeneratePlan(currentUser, true)} 
                 isLoading={isLoading} 
               />
             )}
@@ -330,17 +718,17 @@ const App: React.FC = () => {
             {view === 'WORKOUT_PLAN' && (
               <WorkoutPlanView 
                 plan={currentPlan} 
-                onGenerate={handleGeneratePlan} 
+                onGenerate={() => handleGeneratePlan(currentUser, true)} 
                 isLoading={isLoading} 
               />
             )}
 
             {view === 'PROGRESS' && currentUser && (
-              <ProgressView 
-                logs={currentUser.weightLogs || []} 
-                currentWeight={currentUser.weight}
-                onLogWeight={handleLogWeight}
-              />
+              <ProgressView logs={currentUser.healthLogs || []} onReset={handleResetProgress} />
+            )}
+
+            {view === 'COACH' && currentUser && (
+              <AICoach user={currentUser} plan={currentPlan} logs={currentUser.healthLogs || []} />
             )}
           </div>
         </main>
