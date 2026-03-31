@@ -68,6 +68,13 @@ const AICoach: React.FC<AICoachProps> = ({ user, plan, logs }) => {
         chatRef.current = startCoachChat(user, plan, logs);
       }
 
+      // Check if API key is missing (based on the service's console error)
+      if (process.env.GEMINI_API_KEY === 'undefined' || !process.env.GEMINI_API_KEY) {
+        setMessages(prev => [...prev, { role: 'model', text: "⚠️ **AI Coach is not configured.** Please add your `GEMINI_API_KEY` to the environment variables in Vercel to enable this feature." }]);
+        setIsLoading(false);
+        return;
+      }
+
       const streamResponse = await chatRef.current.sendMessageStream({
         message: userMessage,
       });

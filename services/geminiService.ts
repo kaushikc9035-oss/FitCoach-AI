@@ -2,7 +2,16 @@ import { GoogleGenAI, Type, Chat } from "@google/genai";
 import { UserProfile, GeneratedPlan, HealthLog } from "../types";
 
 // Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getApiKey = () => {
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!key || key === 'undefined') {
+    console.error("GEMINI_API_KEY is missing. Please set it in your environment variables.");
+    return "MISSING_KEY";
+  }
+  return key;
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const generateFitnessPlan = async (profile: UserProfile, isRegeneration: boolean = false): Promise<GeneratedPlan> => {
   const modelId = "gemini-3-flash-preview";
