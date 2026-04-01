@@ -120,7 +120,7 @@ const AICoach: React.FC<AICoachProps> = ({ user, plan, logs }) => {
           </div>
           <div>
             <h1 className="text-2xl font-extrabold font-syne text-ll-text glow-cyan">FitGenius AI Coach</h1>
-            <p className="text-ll-text-muted text-[10px] font-bold uppercase tracking-widest">Neural Link Active</p>
+            <p className="text-ll-text-muted text-[10px] font-bold uppercase tracking-widest">Neural Link Active • v1.2</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
