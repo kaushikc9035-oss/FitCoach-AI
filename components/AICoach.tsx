@@ -89,9 +89,23 @@ const AICoach: React.FC<AICoachProps> = ({ user, plan, logs }) => {
 
       setMessages(prev => [...prev, { role: 'model', text: fullText }]);
       setStreamingMessage('');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Coach Error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "I'm sorry, I encountered an error. Please try again." }]);
+      
+      let errorMessage = "I'm sorry, I encountered an error.";
+      
+      if (error?.message?.includes('401') || error?.message?.includes('403') || error?.message?.includes('API_KEY_INVALID')) {
+        errorMessage = "⚠️ **Invalid API Key.** Your `GEMINI_API_KEY` appears to be incorrect or inactive. Please check your key in [Google AI Studio](https://aistudio.google.com/app/apikey).";
+      } else if (error?.message?.includes('429')) {
+        errorMessage = "⚠️ **Rate Limit Exceeded.** You've reached the free tier limit for the Gemini API. Please wait a moment and try again.";
+      } else if (error?.message?.includes('fetch')) {
+        errorMessage = "⚠️ **Network Error.** I couldn't reach the AI service. This might be a temporary connection issue.";
+      } else {
+        // Show the raw error message to help the user identify the problem
+        errorMessage = `⚠️ **Technical Error:** ${error?.message || "Unknown error occurred"}\n\n*Please ensure your GEMINI_API_KEY is set correctly in Vercel.*`;
+      }
+
+      setMessages(prev => [...prev, { role: 'model', text: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
