@@ -228,7 +228,7 @@ export const startCoachChat = (user: UserProfile, plan: GeneratedPlan | null, lo
   `;
 
   return ai.chats.create({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-3-flash-preview",
     config: {
       systemInstruction,
     },
