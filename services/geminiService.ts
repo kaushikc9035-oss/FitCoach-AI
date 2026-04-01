@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { GoogleGenAI, Type, Chat, ThinkingLevel } from "@google/genai";
 import { UserProfile, GeneratedPlan, HealthLog } from "../types";
 
 // Initialize Gemini
@@ -228,7 +228,7 @@ export const startCoachChat = (user: UserProfile, plan: GeneratedPlan | null, lo
   `;
 
   return ai.chats.create({
-    model: "gemini-3-flash-preview",
+    model: "gemini-flash-latest",
     config: {
       systemInstruction,
     },
